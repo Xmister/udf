@@ -10,17 +10,21 @@ type Udf struct {
 	r        io.ReaderAt
 	isInited bool
 	pvd      *PrimaryVolumeDescriptor
-	pd       *PartitionDescriptor
+	pd       map[uint16]*PartitionDescriptor
 	lvd      *LogicalVolumeDescriptor
 	fsd      *FileSetDescriptor
-	root_fe  *FileEntry
+	root_fe  FileEntryInterface
 }
 
-func (udf *Udf) PartitionStart() uint64 {
+func (udf *Udf) PartitionStart(partition uint16) uint64 {
 	if udf.pd == nil {
 		panic(udf)
 	} else {
-		return uint64(udf.pd.PartitionStartingLocation)
+		metaFile := NewFileEntry(udf.ReadSector(uint64(udf.pd[partition].PartitionStartingLocation)))
+		if metaFile != nil && len(metaFile.GetAllocationDescriptors()) > 0 {
+			return uint64(metaFile.GetAllocationDescriptors()[0].Location + udf.pd[partition].PartitionStartingLocation)
+		}
+		return uint64(udf.pd[partition].PartitionStartingLocation)
 	}
 }
 
@@ -63,30 +67,32 @@ func (udf *Udf) init() {
 		case DESCRIPTOR_PRIMARY_VOLUME:
 			udf.pvd = desc.PrimaryVolumeDescriptor()
 		case DESCRIPTOR_PARTITION:
-			udf.pd = desc.PartitionDescriptor()
+			pd := desc.PartitionDescriptor()
+			udf.pd[pd.PartitionNumber] = pd
 		case DESCRIPTOR_LOGICAL_VOLUME:
 			udf.lvd = desc.LogicalVolumeDescriptor()
 		}
 	}
 
-	partitionStart := udf.PartitionStart()
+	partitionStart := udf.PartitionStart(0)
 
-	udf.fsd = NewFileSetDescriptor(udf.ReadSector(partitionStart + udf.lvd.LogicalVolumeContentsUse.Location))
-	udf.root_fe = NewFileEntry(udf.ReadSector(partitionStart + udf.fsd.RootDirectoryICB.Location))
+	udf.fsd = NewFileSetDescriptor(udf.ReadSector(partitionStart + uint64(udf.lvd.LogicalVolumeContentsUse.Location.LogicalBlockNumber)))
+	udf.root_fe = NewFileEntry(udf.ReadSector(partitionStart + uint64(udf.fsd.RootDirectoryICB.Location.LogicalBlockNumber)))
 
 	udf.isInited = true
 }
 
-func (udf *Udf) ReadDir(fe *FileEntry) []File {
+func (udf *Udf) ReadDir(fe FileEntryInterface) []File {
 	udf.init()
 
 	if fe == nil {
 		fe = udf.root_fe
 	}
 
-	ps := udf.PartitionStart()
+	ps := udf.PartitionStart(0)
 
-	adPos := fe.AllocationDescriptors[0]
+
+	adPos := fe.GetAllocationDescriptors()[0]
 	fdLen := uint64(adPos.Length)
 
 	fdBuf := udf.ReadSectors(ps+uint64(adPos.Location), (fdLen+SECTOR_SIZE-1)/SECTOR_SIZE)
@@ -112,6 +118,7 @@ func NewUdfFromReader(r io.ReaderAt) *Udf {
 	udf := &Udf{
 		r:        r,
 		isInited: false,
+		pd:		  make(map[uint16]*PartitionDescriptor),
 	}
 
 	return udf

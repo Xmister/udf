@@ -15,7 +15,7 @@ func (itag *ICBTag) FromBytes(b []byte) *ICBTag {
 	itag.StrategyType = rl_u16(b[4:])
 	itag.StrategyParameter = rl_u16(b[4:])
 	itag.MaximumNumberOfEntries = rl_u16(b[8:])
-	itag.FileType = r_u8(b[1:])
+	itag.FileType = r_u8(b[11:])
 	itag.ParentICBLocation = rl_u48(b[12:])
 	itag.Flags = rl_u16(b[18:])
 	return itag

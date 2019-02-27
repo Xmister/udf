@@ -41,7 +41,7 @@ func (d *Descriptor) Data() []byte {
 func (d *Descriptor) FromBytes(b []byte) *Descriptor {
 	d.TagIdentifier = rl_u16(b[0:])
 	d.DescriptorVersion = rl_u16(b[2:])
-	d.TagChecksum = r_u8(b[3:])
+	d.TagChecksum = r_u8(b[4:])
 	d.TagSerialNumber = rl_u16(b[6:])
 	d.DescriptorCRC = rl_u16(b[8:])
 	d.DescriptorCRCLength = rl_u16(b[10:])
@@ -304,6 +304,14 @@ func (d *Descriptor) FileIdentifierDescriptor() *FileIdentifierDescriptor {
 	return NewFileIdentifierDescriptor(d.data)
 }
 
+type FileEntryInterface interface {
+	GetAllocationDescriptors() []Extent
+	GetPermissions() uint32
+	GetInformationLength() uint64
+	GetModificationTime() time.Time
+	GetICBTag() *ICBTag
+}
+
 type FileEntry struct {
 	Descriptor                    Descriptor
 	ICBTag                        *ICBTag
@@ -329,6 +337,13 @@ type FileEntry struct {
 	AllocationDescriptors         []Extent
 }
 
+type ExtendedFileEntry struct {
+	FileEntry
+	CreationTime              time.Time
+	ObjectSize                uint64
+	StreamDirectoryIcb        ExtentLong
+}
+
 func (fe *FileEntry) FromBytes(b []byte) *FileEntry {
 	fe.Descriptor.FromBytes(b)
 	fe.ICBTag = NewICBTag(b[16:])
@@ -351,6 +366,9 @@ func (fe *FileEntry) FromBytes(b []byte) *FileEntry {
 	fe.LengthOfExtendedAttributes = rl_u32(b[168:])
 	fe.LengthOfAllocationDescriptors = rl_u32(b[172:])
 	allocDescStart := 176 + fe.LengthOfExtendedAttributes
+	if allocDescStart > uint32(len(b)) {
+		return nil
+	}
 	fe.ExtendedAttributes = b[176:allocDescStart]
 	fe.AllocationDescriptors = make([]Extent, fe.LengthOfAllocationDescriptors/8)
 	for i := range fe.AllocationDescriptors {
@@ -359,10 +377,71 @@ func (fe *FileEntry) FromBytes(b []byte) *FileEntry {
 	return fe
 }
 
-func NewFileEntry(b []byte) *FileEntry {
-	return new(FileEntry).FromBytes(b)
+func (fe *FileEntry) GetAllocationDescriptors() []Extent {
+	return fe.AllocationDescriptors
 }
 
-func (d *Descriptor) FileEntry() *FileEntry {
+func (fe *FileEntry) GetPermissions() uint32 {
+	return fe.Permissions
+}
+
+func (fe *FileEntry) GetInformationLength() uint64 {
+	return fe.InformationLength
+}
+
+func (fe *FileEntry) GetModificationTime() time.Time {
+	return fe.ModificationTime
+}
+
+func (fe *FileEntry) GetICBTag() *ICBTag {
+	return fe.ICBTag
+}
+
+func NewFileEntry(b []byte) (fe FileEntryInterface) {
+	if e := new(FileEntry).FromBytes(b); e == nil {
+		fe = new(ExtendedFileEntry).FromBytes(b)
+	} else {
+		fe = e
+	}
+	return
+}
+
+func (fe *ExtendedFileEntry) FromBytes(b []byte) *ExtendedFileEntry {
+	fe.Descriptor.FromBytes(b)
+	fe.ICBTag = NewICBTag(b[16:])
+	fe.Uid = rl_u32(b[36:])
+	fe.Gid = rl_u32(b[40:])
+	fe.Permissions = rl_u32(b[44:])
+	fe.FileLinkCount = rl_u16(b[48:])
+	fe.RecordFormat = r_u8(b[50:])
+	fe.RecordDisplayAttributes = r_u8(b[51:])
+	fe.RecordLength = rl_u32(b[52:])
+	fe.InformationLength = rl_u64(b[56:])
+	fe.ObjectSize = rl_u64(b[64:])
+	fe.LogicalBlocksRecorded = rl_u64(b[72:])
+	fe.AccessTime = r_timestamp(b[80:])
+	fe.ModificationTime = r_timestamp(b[92:])
+	fe.CreationTime = r_timestamp(b[104:])
+	fe.AttributeTime = r_timestamp(b[116:])
+	fe.Checkpoint = rl_u32(b[128:])
+	fe.ExtendedAttributeICB = NewExtentLong(b[136:])
+	fe.StreamDirectoryIcb = NewExtentLong(b[152:])
+	fe.ImplementationIdentifier = NewEntityID(b[168:])
+	fe.UniqueId = rl_u64(b[200:])
+	fe.LengthOfExtendedAttributes = rl_u32(b[208:])
+	fe.LengthOfAllocationDescriptors = rl_u32(b[212:])
+	allocDescStart := 216 + fe.LengthOfExtendedAttributes
+	if allocDescStart > uint32(len(b)) {
+		return nil
+	}
+	fe.ExtendedAttributes = b[216:allocDescStart]
+	fe.AllocationDescriptors = make([]Extent, fe.LengthOfAllocationDescriptors/8)
+	for i := range fe.AllocationDescriptors {
+		fe.AllocationDescriptors[i] = NewExtent(b[allocDescStart+uint32(i)*8:])
+	}
+	return fe
+}
+
+func (d *Descriptor) FileEntry() FileEntryInterface {
 	return NewFileEntry(d.data)
 }

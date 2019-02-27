@@ -9,7 +9,7 @@ import (
 type File struct {
 	Udf               *Udf
 	Fid               *FileIdentifierDescriptor
-	fe                *FileEntry
+	fe                FileEntryInterface
 	fileEntryPosition uint64
 }
 
@@ -18,13 +18,13 @@ func (f *File) GetFileEntryPosition() int64 {
 }
 
 func (f *File) GetFileOffset() int64 {
-	return SECTOR_SIZE * (int64(f.FileEntry().AllocationDescriptors[0].Location) + int64(f.Udf.PartitionStart()))
+	return SECTOR_SIZE * (int64(f.FileEntry().GetAllocationDescriptors()[0].Location) + int64(f.Udf.PartitionStart(0)))
 }
 
-func (f *File) FileEntry() *FileEntry {
+func (f *File) FileEntry() FileEntryInterface {
 	if f.fe == nil {
-		f.fileEntryPosition = f.Fid.ICB.Location
-		f.fe = NewFileEntry(f.Udf.ReadSector(f.Udf.PartitionStart() + f.fileEntryPosition))
+		f.fileEntryPosition = uint64(f.Fid.ICB.Location.LogicalBlockNumber)
+		f.fe = NewFileEntry(f.Udf.ReadSector(f.Udf.PartitionStart(0) + f.fileEntryPosition))
 	}
 	return f.fe
 }
@@ -40,7 +40,7 @@ func (f *File) Name() string {
 func (f *File) Mode() os.FileMode {
 	var mode os.FileMode
 
-	perms := os.FileMode(f.FileEntry().Permissions)
+	perms := os.FileMode(f.FileEntry().GetPermissions())
 	mode |= ((perms >> 0) & 7) << 0
 	mode |= ((perms >> 5) & 7) << 3
 	mode |= ((perms >> 10) & 7) << 6
@@ -53,16 +53,15 @@ func (f *File) Mode() os.FileMode {
 }
 
 func (f *File) Size() int64 {
-	return int64(f.FileEntry().InformationLength)
+	return int64(f.FileEntry().GetInformationLength())
 }
 
 func (f *File) ModTime() time.Time {
-	return f.FileEntry().ModificationTime
+	return f.FileEntry().GetModificationTime()
 }
 
 func (f *File) IsDir() bool {
-	// TODO :Fix! This field always 0 :(
-	return f.FileEntry().ICBTag.FileType == 4
+	return f.FileEntry().GetICBTag().FileType == 4
 }
 
 func (f *File) Sys() interface{} {
