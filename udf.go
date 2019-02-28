@@ -16,16 +16,19 @@ type Udf struct {
 	root_fe  FileEntryInterface
 }
 
-func (udf *Udf) PartitionStart(partition uint16) uint64 {
+func (udf *Udf) PartitionStart(partition uint16) (physical uint64, meta uint64) {
 	if udf.pd == nil {
 		panic(udf)
 	} else {
+		physical = uint64(udf.pd[partition].PartitionStartingLocation)
 		metaFile := NewFileEntry(udf.ReadSector(uint64(udf.pd[partition].PartitionStartingLocation)))
 		if metaFile != nil && len(metaFile.GetAllocationDescriptors()) > 0 {
-			return uint64(metaFile.GetAllocationDescriptors()[0].Location + udf.pd[partition].PartitionStartingLocation)
+			meta = uint64(uint32(metaFile.GetAllocationDescriptors()[0].GetLocation()) + udf.pd[partition].PartitionStartingLocation)
+		} else {
+			meta = physical
 		}
-		return uint64(udf.pd[partition].PartitionStartingLocation)
 	}
+	return
 }
 
 func (udf *Udf) GetReader() io.ReaderAt {
@@ -74,7 +77,7 @@ func (udf *Udf) init() {
 		}
 	}
 
-	partitionStart := udf.PartitionStart(0)
+	_, partitionStart := udf.PartitionStart(0)
 
 	udf.fsd = NewFileSetDescriptor(udf.ReadSector(partitionStart + uint64(udf.lvd.LogicalVolumeContentsUse.Location.LogicalBlockNumber)))
 	udf.root_fe = NewFileEntry(udf.ReadSector(partitionStart + uint64(udf.fsd.RootDirectoryICB.Location.LogicalBlockNumber)))
@@ -89,18 +92,18 @@ func (udf *Udf) ReadDir(fe FileEntryInterface) []File {
 		fe = udf.root_fe
 	}
 
-	ps := udf.PartitionStart(0)
+	_, ps := udf.PartitionStart(0)
 
 
 	adPos := fe.GetAllocationDescriptors()[0]
-	fdLen := uint64(adPos.Length)
+	fdLen := uint64(adPos.GetLength())
 
-	fdBuf := udf.ReadSectors(ps+uint64(adPos.Location), (fdLen+SECTOR_SIZE-1)/SECTOR_SIZE)
+	fdBuf := udf.ReadSectors(ps+uint64(adPos.GetLocation()), (fdLen+SECTOR_SIZE-1)/SECTOR_SIZE)
 	fdOff := uint64(0)
 
 	result := make([]File, 0)
 
-	for uint32(fdOff) < adPos.Length {
+	for uint32(fdOff) < adPos.GetLength() {
 		fid := NewFileIdentifierDescriptor(fdBuf[fdOff:])
 		if fid.FileIdentifier != "" {
 			result = append(result, File{

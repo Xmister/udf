@@ -1,8 +1,21 @@
 package udf
 
+type ExtentInterface interface {
+	GetLocation() uint64
+	GetLength() uint32
+}
+
 type Extent struct {
 	Length   uint32
 	Location uint32
+}
+
+func (e Extent) GetLocation() uint64 {
+	return uint64(e.Location)
+}
+
+func (e Extent) GetLength() uint32 {
+	return e.Length
 }
 
 func NewExtent(b []byte) Extent {
@@ -17,6 +30,14 @@ type ExtentSmall struct {
 	Location uint64
 }
 
+func (e ExtentSmall) GetLocation() uint64 {
+	return uint64(e.Location)
+}
+
+func (e ExtentSmall) GetLength() uint32 {
+	return uint32(e.Length)
+}
+
 func NewExtentSmall(b []byte) ExtentSmall {
 	return ExtentSmall{
 		Length:   rl_u16(b[0:]),
@@ -27,6 +48,14 @@ func NewExtentSmall(b []byte) ExtentSmall {
 type ExtentLong struct {
 	Length   uint32
 	Location LbAddr
+}
+
+func (e ExtentLong) GetLocation() uint64 {
+	return uint64(e.Location.LogicalBlockNumber)
+}
+
+func (e ExtentLong) GetLength() uint32 {
+	return e.Length
 }
 
 func NewExtentLong(b []byte) ExtentLong {

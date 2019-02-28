@@ -17,14 +17,22 @@ func (f *File) GetFileEntryPosition() int64 {
 	return int64(f.fileEntryPosition)
 }
 
-func (f *File) GetFileOffset() int64 {
-	return SECTOR_SIZE * (int64(f.FileEntry().GetAllocationDescriptors()[0].Location) + int64(f.Udf.PartitionStart(0)))
+func (f *File) GetFileOffset() (res int64) {
+	physical, meta := f.Udf.PartitionStart(0)
+	res = int64(f.FileEntry().GetAllocationDescriptors()[0].GetLocation())
+	if f.fe.GetICBTag().AllocationType == LongDescriptors {
+		res += int64(physical)
+	} else if f.fe.GetICBTag().AllocationType == ShortDescriptors {
+		res += int64(meta)
+	}
+	return SECTOR_SIZE * res
 }
 
 func (f *File) FileEntry() FileEntryInterface {
 	if f.fe == nil {
 		f.fileEntryPosition = uint64(f.Fid.ICB.Location.LogicalBlockNumber)
-		f.fe = NewFileEntry(f.Udf.ReadSector(f.Udf.PartitionStart(0) + f.fileEntryPosition))
+		_, meta := f.Udf.PartitionStart(0)
+		f.fe = NewFileEntry(f.Udf.ReadSector(meta + f.fileEntryPosition))
 	}
 	return f.fe
 }

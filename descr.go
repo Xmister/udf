@@ -305,7 +305,7 @@ func (d *Descriptor) FileIdentifierDescriptor() *FileIdentifierDescriptor {
 }
 
 type FileEntryInterface interface {
-	GetAllocationDescriptors() []Extent
+	GetAllocationDescriptors() []ExtentInterface
 	GetPermissions() uint32
 	GetInformationLength() uint64
 	GetModificationTime() time.Time
@@ -334,7 +334,7 @@ type FileEntry struct {
 	LengthOfExtendedAttributes    uint32
 	LengthOfAllocationDescriptors uint32
 	ExtendedAttributes            []byte
-	AllocationDescriptors         []Extent
+	AllocationDescriptors         []byte
 }
 
 type ExtendedFileEntry struct {
@@ -370,15 +370,24 @@ func (fe *FileEntry) FromBytes(b []byte) *FileEntry {
 		return nil
 	}
 	fe.ExtendedAttributes = b[176:allocDescStart]
-	fe.AllocationDescriptors = make([]Extent, fe.LengthOfAllocationDescriptors/8)
-	for i := range fe.AllocationDescriptors {
-		fe.AllocationDescriptors[i] = NewExtent(b[allocDescStart+uint32(i)*8:])
-	}
+	fe.AllocationDescriptors = b[allocDescStart:allocDescStart+fe.LengthOfAllocationDescriptors]
 	return fe
 }
 
-func (fe *FileEntry) GetAllocationDescriptors() []Extent {
-	return fe.AllocationDescriptors
+func (fe *FileEntry) GetAllocationDescriptors() (list []ExtentInterface) {
+	switch fe.ICBTag.AllocationType {
+	case ShortDescriptors:
+		list = make([]ExtentInterface, fe.LengthOfAllocationDescriptors/8)
+		for i := range list {
+			list[i] = NewExtent(fe.AllocationDescriptors[uint32(i)*8:])
+		}
+	case LongDescriptors:
+		list = make([]ExtentInterface, fe.LengthOfAllocationDescriptors/16)
+		for i := range list {
+			list[i] = NewExtentLong(fe.AllocationDescriptors[uint32(i)*16:])
+		}
+	}
+	return
 }
 
 func (fe *FileEntry) GetPermissions() uint32 {
@@ -435,10 +444,7 @@ func (fe *ExtendedFileEntry) FromBytes(b []byte) *ExtendedFileEntry {
 		return nil
 	}
 	fe.ExtendedAttributes = b[216:allocDescStart]
-	fe.AllocationDescriptors = make([]Extent, fe.LengthOfAllocationDescriptors/8)
-	for i := range fe.AllocationDescriptors {
-		fe.AllocationDescriptors[i] = NewExtent(b[allocDescStart+uint32(i)*8:])
-	}
+	fe.AllocationDescriptors = b[allocDescStart:allocDescStart+fe.LengthOfAllocationDescriptors]
 	return fe
 }
 

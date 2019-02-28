@@ -1,5 +1,14 @@
 package udf
 
+type AllocationType int
+
+const (
+	ShortDescriptors AllocationType = iota
+	LongDescriptors
+	ExtendedDescriptors
+	Embedded
+)
+
 type ICBTag struct {
 	PriorRecordedNumberOfDirectEntries uint32
 	StrategyType                       uint16
@@ -8,6 +17,7 @@ type ICBTag struct {
 	FileType                           uint8
 	ParentICBLocation                  uint64
 	Flags                              uint16
+	AllocationType                     AllocationType
 }
 
 func (itag *ICBTag) FromBytes(b []byte) *ICBTag {
@@ -18,6 +28,7 @@ func (itag *ICBTag) FromBytes(b []byte) *ICBTag {
 	itag.FileType = r_u8(b[11:])
 	itag.ParentICBLocation = rl_u48(b[12:])
 	itag.Flags = rl_u16(b[18:])
+	itag.AllocationType = (AllocationType)(itag.Flags & 0x3)
 	return itag
 }
 
