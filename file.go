@@ -25,7 +25,7 @@ func (f *File) GetFileOffset() (res int64) {
 	} else if f.fe.GetICBTag().AllocationType == ShortDescriptors {
 		res += int64(meta)
 	}
-	return SECTOR_SIZE * res
+	return int64(SECTOR_SIZE) * res
 }
 
 func (f *File) FileEntry() FileEntryInterface {

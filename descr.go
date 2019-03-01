@@ -38,6 +38,15 @@ func (d *Descriptor) Data() []byte {
 	return buf
 }
 
+func (d* Descriptor) Checksum() (checksum uint8) {
+		for i:=0; i<16; i++ {
+			if (i != 4) {
+				checksum += d.data[i]
+			}
+		}
+		return
+}
+
 func (d *Descriptor) FromBytes(b []byte) *Descriptor {
 	d.TagIdentifier = rl_u16(b[0:])
 	d.DescriptorVersion = rl_u16(b[2:])
