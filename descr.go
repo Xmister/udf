@@ -179,13 +179,22 @@ type PartitionMap struct {
 	PartitionMapLength   uint8
 	VolumeSequenceNumber uint16
 	PartitionNumber      uint16
+	PartitionStart       uint32
 }
 
 func (pm *PartitionMap) FromBytes(b []byte) *PartitionMap {
 	pm.PartitionMapType = rb_u8(b[0:])
 	pm.PartitionMapLength = rb_u8(b[1:])
-	pm.VolumeSequenceNumber = rb_u16(b[2:])
-	pm.PartitionNumber = rb_u16(b[4:])
+	offset:=0
+	switch pm.PartitionMapType {
+	case 1:
+		offset = 2
+	case 2:
+		offset = 36
+	}
+	pm.VolumeSequenceNumber = rb_u16(b[offset:])
+	pm.PartitionNumber = rb_u16(b[offset+2:])
+	pm.PartitionStart = uint32(pm.VolumeSequenceNumber)
 	return pm
 }
 
@@ -217,7 +226,7 @@ func (lvd *LogicalVolumeDescriptor) FromBytes(b []byte) *LogicalVolumeDescriptor
 	lvd.ImplementationUse = b[304:432]
 	lvd.IntegritySequenceExtent = NewExtent(b[432:])
 	lvd.PartitionMaps = make([]PartitionMap, lvd.NumberOfPartitionMaps)
-	for i := range lvd.PartitionMaps {
+	for i := uint32(0); i < lvd.NumberOfPartitionMaps; i++ {
 		lvd.PartitionMaps[i].FromBytes(b[440+i*6:])
 	}
 	return lvd
@@ -319,6 +328,7 @@ type FileEntryInterface interface {
 	GetInformationLength() uint64
 	GetModificationTime() time.Time
 	GetICBTag() *ICBTag
+	GetPartition() uint16
 }
 
 type FileEntry struct {
@@ -344,6 +354,8 @@ type FileEntry struct {
 	LengthOfAllocationDescriptors uint32
 	ExtendedAttributes            []byte
 	AllocationDescriptors         []byte
+	// Manual field
+	Partition                     uint16
 }
 
 type ExtendedFileEntry struct {
@@ -383,6 +395,13 @@ func (fe *FileEntry) FromBytes(b []byte) *FileEntry {
 	return fe
 }
 
+func (fe *FileEntry) GetPartition() uint16 {
+	if fe.ICBTag.AllocationType == LongDescriptors {
+		return fe.GetAllocationDescriptors()[0].GetPartition()
+	}
+	return fe.Partition
+}
+
 func (fe *FileEntry) GetAllocationDescriptors() (list []ExtentInterface) {
 	switch fe.ICBTag.AllocationType {
 	case ShortDescriptors:
@@ -415,10 +434,13 @@ func (fe *FileEntry) GetICBTag() *ICBTag {
 	return fe.ICBTag
 }
 
-func NewFileEntry(b []byte) (fe FileEntryInterface) {
+func NewFileEntry(partition uint16, b []byte) (fe FileEntryInterface) {
 	if e := new(FileEntry).FromBytes(b); e == nil {
-		fe = new(ExtendedFileEntry).FromBytes(b)
+		ee := new(ExtendedFileEntry).FromBytes(b)
+		ee.Partition = partition
+		fe = ee
 	} else {
+		e.Partition = partition
 		fe = e
 	}
 	return
@@ -458,5 +480,5 @@ func (fe *ExtendedFileEntry) FromBytes(b []byte) *ExtendedFileEntry {
 }
 
 func (d *Descriptor) FileEntry() FileEntryInterface {
-	return NewFileEntry(d.data)
+	return NewFileEntry(0, d.data)
 }
