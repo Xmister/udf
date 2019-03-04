@@ -30,7 +30,7 @@ func (f *File) GetFileOffset() (res int64) {
 
 func (f *File) FileEntry() FileEntryInterface {
 	if f.fe == nil {
-		f.fileEntryPosition = uint64(f.Fid.ICB.Location.LogicalBlockNumber)
+		f.fileEntryPosition = uint64(f.Fid.ICB.GetLocation())
 		_, meta := f.Udf.PartitionStart(0)
 		f.fe = NewFileEntry(f.Udf.ReadSector(meta + f.fileEntryPosition))
 	}
