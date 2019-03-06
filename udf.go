@@ -44,10 +44,10 @@ func (udf *Udf) ReadSectors(sectorNumber uint64, sectorsCount uint64) []byte {
 	if err != nil {
 		panic(err)
 	}
-	if readed != int(SECTOR_SIZE*sectorsCount) {
+	/*if readed != int(SECTOR_SIZE*sectorsCount) {
 		panic(readed)
-	}
-	return buf[:]
+	}*/
+	return buf[:readed]
 }
 
 func (udf *Udf) ReadSector(sectorNumber uint64) []byte {

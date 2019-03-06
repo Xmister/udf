@@ -19,10 +19,10 @@ type sectionReader struct {
 	size int64
 }
 
-func newSectionReader(base int64, reader io.ReaderAt, start int64, size int64) *sectionReader {
+func newSectionReader(inFileStart int64, reader io.ReaderAt, start int64, size int64) *sectionReader {
 	return &sectionReader{
 		io.NewSectionReader(reader, start, size),
-		start-base,
+		inFileStart,
 		size,
 	}
 }
@@ -35,32 +35,32 @@ type multiSectionReader struct {
 }
 
 func newMultiSectionReader(readers []*sectionReader) *multiSectionReader {
-	var start, end int64
+	var size int64
 	for _, reader := range readers {
-		if reader.start < start {
-			start = reader.start
-		}
-		if reader.size+reader.start > end {
-			end = reader.size+reader.start
-		}
+		size += reader.size
 	}
 	return &multiSectionReader{
 		readers: readers,
-		size: end-start,
+		size: size,
 	}
 }
 
 func (r *multiSectionReader) Read(p []byte) (n int, err error) {
 	var read int
+	// Recursing below could increase the pos multiple times for the same read, so we are saving the starting pos here
+	startpos := r.pos
 	n, err = io.ReadFull(r.readers[r.index], p)
-	if err == io.ErrUnexpectedEOF {
+	if err == io.ErrUnexpectedEOF || err == io.EOF {
 		if r.index+1 < len(r.readers) {
 			r.index++
+			r.readers[r.index].Seek(0,0)
 			read, err = r.Read(p[n:])
 			n+=read
+		} else {
+			err = io.EOF
 		}
 	}
-	r.pos += int64(n)
+	r.pos = startpos + int64(n)
 	return
 }
 
@@ -102,18 +102,12 @@ func (r *multiSectionReader) ReadAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (f *File) GetFileEntryPosition() int64 {
-	return int64(f.fileEntryPosition)
+func (r *multiSectionReader) Size() int64 {
+	return r.size
 }
 
-func (f *File) GetFileOffset(descriptor int) (res int64) {
-	asd := f.FileEntry().GetAllocationDescriptors()[descriptor]
-	partition := f.FileEntry().GetPartition()
-	if f.FileEntry().GetICBTag().AllocationType == LongDescriptors {
-		partition = asd.GetPartition()
-	}
-	res = int64(f.Udf.LogicalPartitionStart(partition) + asd.GetLocation())
-	return int64(SECTOR_SIZE) * res
+func (f *File) GetFileEntryPosition() int64 {
+	return int64(f.fileEntryPosition)
 }
 
 func (f *File) FileEntry() FileEntryInterface {
@@ -125,12 +119,26 @@ func (f *File) FileEntry() FileEntryInterface {
 	return f.fe
 }
 
+func (f *File) getReaders(descs []ExtentInterface, filePos int64) (readers []*sectionReader, finalFilePos int64) {
+	finalFilePos = filePos
+	for i:=0; i<len(descs); i++ {
+		if descs[i].HasExtended() {
+			extendData := f.Udf.ReadSector(f.Udf.LogicalPartitionStart(descs[i].GetPartition()) + descs[i].GetLocation())
+			aed := new(AED).FromBytes(extendData)
+			var subReaders []*sectionReader
+			subReaders, finalFilePos = f.getReaders(GetAllocationDescriptors(f.FileEntry().GetICBTag().AllocationType, extendData[24:], aed.LengthOfAllocationDescriptors), finalFilePos)
+			readers = append(readers, subReaders...)
+		} else if !descs[i].IsNotRecorded() {
+			readers = append(readers, newSectionReader(finalFilePos, f.Udf.r, int64(SECTOR_SIZE)*int64(f.Udf.LogicalPartitionStart(descs[i].GetPartition()) + descs[i].GetLocation()), int64(descs[i].GetLength())))
+		}
+		finalFilePos += int64(descs[i].GetLength())
+	}
+	return
+}
+
 func (f *File) NewReader() *multiSectionReader {
 	descs := f.FileEntry().GetAllocationDescriptors()
-	readers := make([]*sectionReader, len(descs))
-	for i:=0; i<len(descs); i++ {
-		readers[i] = newSectionReader(f.GetFileOffset(0), f.Udf.r, f.GetFileOffset(i), int64(descs[i].GetLength()))
-	}
+	readers, _ := f.getReaders(descs, 0)
 	return newMultiSectionReader(readers)
 }
 

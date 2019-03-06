@@ -19,6 +19,9 @@ const (
 	DESCRIPTOR_INDIRECT_ENTRY            = 0x103
 	DESCRIPTOR_TERMINAL_ENTRY            = 0x104
 	DESCRIPTOR_FILE_ENTRY                = 0x105
+	UDF_EXTENT_FLAG_MASK                 = 0xC0000000
+	EXT_NOT_RECORDED_ALLOCATED           = 0x40000000
+	EXT_NOT_RECORDED_NOT_ALLOCATED       = 0x80000000
 )
 
 type Descriptor struct {
@@ -402,20 +405,40 @@ func (fe *FileEntry) GetPartition() uint16 {
 	return fe.Partition
 }
 
-func (fe *FileEntry) GetAllocationDescriptors() (list []ExtentInterface) {
-	switch fe.ICBTag.AllocationType {
+func GetAllocationDescriptor(t AllocationType, b []byte) ExtentInterface {
+	switch t {
 	case ShortDescriptors:
-		list = make([]ExtentInterface, fe.LengthOfAllocationDescriptors/8)
-		for i := range list {
-			list[i] = NewExtent(fe.AllocationDescriptors[uint32(i)*8:])
-		}
+		return NewExtent(b)
 	case LongDescriptors:
-		list = make([]ExtentInterface, fe.LengthOfAllocationDescriptors/16)
-		for i := range list {
-			list[i] = NewExtentLong(fe.AllocationDescriptors[uint32(i)*16:])
-		}
+		return NewExtentLong(b)
+	case ExtendedDescriptors:
+		return NewExtentExtended(b)
 	}
+	return nil
+}
+
+func GetAllocationDescriptors(t AllocationType, b []byte, len uint32) (list []ExtentInterface) {
+	var descLen uint32
+	switch t {
+	case ShortDescriptors:
+		descLen = 8
+	case LongDescriptors:
+		descLen = 16
+	case ExtendedDescriptors:
+		descLen = 24
+	default:
+		return
+	}
+	list = make([]ExtentInterface, len/descLen)
+	for i := range list {
+		list[i] = GetAllocationDescriptor(t, b[uint32(i)*descLen:])
+	}
+
 	return
+}
+
+func (fe *FileEntry) GetAllocationDescriptors() (list []ExtentInterface) {
+	return GetAllocationDescriptors(fe.ICBTag.AllocationType, fe.AllocationDescriptors, fe.LengthOfAllocationDescriptors)
 }
 
 func (fe *FileEntry) GetPermissions() uint32 {
