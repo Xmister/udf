@@ -46,21 +46,23 @@ func newMultiSectionReader(readers []*sectionReader) *multiSectionReader {
 }
 
 func (r *multiSectionReader) Read(p []byte) (n int, err error) {
-	var read int
-	// Recursing below could increase the pos multiple times for the same read, so we are saving the starting pos here
-	startpos := r.pos
-	n, err = io.ReadFull(r.readers[r.index], p)
-	if err == io.ErrUnexpectedEOF || err == io.EOF {
+	if r.index > len(r.readers)-1 {
+		return 0, io.EOF
+	}
+	n, err = r.readers[r.index].Read(p)
+	r.pos += int64(n)
+	if err != nil {
 		if r.index+1 < len(r.readers) {
 			r.index++
-			r.readers[r.index].Seek(0,0)
-			read, err = r.Read(p[n:])
-			n+=read
-		} else {
-			err = io.EOF
+			r.readers[r.index].Seek(0, 0)
+			if n == 0 {
+				n, err = r.Read(p)
+			}
 		}
 	}
-	r.pos = startpos + int64(n)
+	if n > 0 {
+		err = nil
+	}
 	return
 }
 
