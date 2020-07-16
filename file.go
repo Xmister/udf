@@ -131,7 +131,7 @@ func (f *File) getReaders(descs []ExtentInterface, filePos int64) (readers []*se
 			subReaders, finalFilePos = f.getReaders(GetAllocationDescriptors(f.FileEntry().GetICBTag().AllocationType, extendData[24:], aed.LengthOfAllocationDescriptors), finalFilePos)
 			readers = append(readers, subReaders...)
 		} else if !descs[i].IsNotRecorded() {
-			readers = append(readers, newSectionReader(finalFilePos, f.Udf.r, int64(SECTOR_SIZE)*int64(f.Udf.LogicalPartitionStart(descs[i].GetPartition()) + descs[i].GetLocation()), int64(descs[i].GetLength())))
+			readers = append(readers, newSectionReader(finalFilePos, f.Udf.r, int64(f.Udf.SECTOR_SIZE)*int64(f.Udf.LogicalPartitionStart(descs[i].GetPartition()) + descs[i].GetLocation()), int64(descs[i].GetLength())))
 		}
 		finalFilePos += int64(descs[i].GetLength())
 	}

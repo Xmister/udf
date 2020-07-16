@@ -1,12 +1,9 @@
 package udf
 
 import (
-	"io"
 	"errors"
+	"io"
 )
-
-// uint64 so the type matches in most calculations
-var SECTOR_SIZE uint64
 
 type Udf struct {
 	r        io.ReaderAt
@@ -16,6 +13,7 @@ type Udf struct {
 	lvd      *LogicalVolumeDescriptor
 	fsd      *FileSetDescriptor
 	root_fe  FileEntryInterface
+	SECTOR_SIZE uint64
 }
 
 func (udf *Udf) PhysicalPartitionStart(partition uint16) (physical uint64) {
@@ -39,15 +37,15 @@ func (udf *Udf) GetReader() io.ReaderAt {
 }
 
 func (udf *Udf) ReadSectors(sectorNumber uint64, sectorsCount uint64) []byte {
-	buf := make([]byte, SECTOR_SIZE*sectorsCount)
-	readed, err := udf.r.ReadAt(buf[:], int64(SECTOR_SIZE*sectorNumber))
+	buf := make([]byte, udf.SECTOR_SIZE*sectorsCount)
+	read, err := udf.r.ReadAt(buf[:], int64(udf.SECTOR_SIZE*sectorNumber))
 	if err != nil {
 		panic(err)
 	}
-	/*if readed != int(SECTOR_SIZE*sectorsCount) {
+	/*if readed != int(udf.SECTOR_SIZE*sectorsCount) {
 		panic(readed)
 	}*/
-	return buf[:readed]
+	return buf[:read]
 }
 
 func (udf *Udf) ReadSector(sectorNumber uint64) []byte {
@@ -61,7 +59,7 @@ func (udf *Udf) init() (err error) {
 
 	var anchorDesc *AnchorVolumeDescriptorPointer
 
-	for SECTOR_SIZE = 512; SECTOR_SIZE <= 32768; SECTOR_SIZE <<= 1 {
+	for udf.SECTOR_SIZE = 512; udf.SECTOR_SIZE <= 32768; udf.SECTOR_SIZE <<= 1 {
 		anchorDesc = NewAnchorVolumeDescriptorPointer(udf.ReadSector(256))
 		if anchorDesc.Descriptor.TagIdentifier == DESCRIPTOR_ANCHOR_VOLUME_POINTER &&
 			anchorDesc.Descriptor.TagChecksum == anchorDesc.Descriptor.Checksum() {
@@ -123,7 +121,7 @@ func (udf *Udf) ReadDir(fe FileEntryInterface) []File {
 	fdLen := uint64(adPos.GetLength())
 
 
-	fdBuf := udf.ReadSectors(ps+adPos.GetLocation(), (fdLen+SECTOR_SIZE-1)/SECTOR_SIZE)
+	fdBuf := udf.ReadSectors(ps+adPos.GetLocation(), (fdLen+udf.SECTOR_SIZE-1)/udf.SECTOR_SIZE)
 	fdOff := uint64(0)
 
 	result := make([]File, 0)
