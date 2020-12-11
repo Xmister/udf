@@ -2,7 +2,9 @@ package udf
 
 import (
 	"errors"
+	"fmt"
 	"io"
+	"unsafe"
 )
 
 // Udf is a wrapper around an .iso file that allows reading its ISO-13346 "UDF" data
@@ -78,6 +80,12 @@ func (udf *Udf) init() error {
 
 	for i, pMap := range udf.lvd.PartitionMaps {
 		if pMap.PartitionMapType != 2 {
+			// Check to error early if there is no match with a partition number
+			if _, ok := udf.pd[pMap.PartitionNumber]; !ok {
+				msg := fmt.Sprintf("could not find partition number: %d\n", pMap.PartitionNumber)
+				err = errors.New(msg)
+				return err
+			}
 			udf.lvd.PartitionMaps[i].PartitionStart = udf.pd[pMap.PartitionNumber].PartitionStartingLocation
 			continue
 		}
@@ -127,8 +135,14 @@ func (udf *Udf) ReadDir(fe FileEntryInterface) []File {
 	fdOff := uint64(0)
 
 	result := make([]File, 0)
-
+	var dummy *FileIdentifierDescriptor
+	fidSize := int(unsafe.Sizeof(*dummy))
 	for uint32(fdOff) < adPos.GetLength() {
+		// Some Windows ISOs have some padding data that we can ignore?
+		if len(fdBuf[fdOff:]) < fidSize {
+			//fmt.Printf("WARNING: skipping incomplete data\n")
+			break
+		}
 		fid := NewFileIdentifierDescriptor(fdBuf[fdOff:])
 		if fid.FileIdentifier != "" {
 			result = append(result, File{

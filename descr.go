@@ -235,7 +235,9 @@ func (pm *PartitionMap) FromBytes(b []byte) *PartitionMap {
 		offset = 36
 	}
 	pm.VolumeSequenceNumber = rb_u16(b[offset:])
-	pm.PartitionNumber = rb_u16(b[offset+2:])
+	// XXX - For whatever reason, the Microsoft ISOs have a little endian partition
+	// number here???
+	pm.PartitionNumber = rl_u16(b[offset+2:])
 	pm.PartitionStart = uint32(pm.VolumeSequenceNumber)
 	return pm
 }
