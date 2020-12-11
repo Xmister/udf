@@ -6,50 +6,25 @@ import (
 )
 
 type Udf struct {
-	r        io.ReaderAt
-	isInited bool
-	pvd      *PrimaryVolumeDescriptor
-	pd       map[uint16]*PartitionDescriptor
-	lvd      *LogicalVolumeDescriptor
-	fsd      *FileSetDescriptor
-	root_fe  FileEntryInterface
+	r           io.ReaderAt
+	isInited    bool
+	pvd         *PrimaryVolumeDescriptor
+	pd          map[uint16]*PartitionDescriptor
+	lvd         *LogicalVolumeDescriptor
+	fsd         *FileSetDescriptor
+	root_fe     FileEntryInterface
 	SECTOR_SIZE uint64
 }
 
-func (udf *Udf) PhysicalPartitionStart(partition uint16) (physical uint64) {
-	if udf.pd == nil {
-		panic(udf)
-	} else {
-		return uint64(udf.pd[partition].PartitionStartingLocation)
+func NewUdfFromReader(r io.ReaderAt) (udf *Udf, err error) {
+	udf = &Udf{
+		r:        r,
+		isInited: false,
+		pd:       make(map[uint16]*PartitionDescriptor),
 	}
-}
 
-func (udf *Udf) LogicalPartitionStart(partition uint16) (logical uint64) {
-	if udf.lvd == nil || len(udf.lvd.PartitionMaps) < 1 {
-		panic(udf)
-	} else {
-		return uint64(udf.lvd.PartitionMaps[partition].PartitionStart)
-	}
-}
-
-func (udf *Udf) GetReader() io.ReaderAt {
-	return udf.r
-}
-
-func (udf *Udf) ReadSectors(sectorNumber uint64, sectorsCount uint64) []byte {
-	buf := make([]byte, udf.SECTOR_SIZE*sectorsCount)
-	read, err := udf.r.ReadAt(buf[:], int64(udf.SECTOR_SIZE*sectorNumber))
-	if err != nil {
-		panic(err)
-	}
-	/*if readed != int(udf.SECTOR_SIZE*sectorsCount) {
-		panic(readed)
-	}*/
-	return buf[:read]
-}
-
-func (udf *Udf) ReadSector(sectorNumber uint64) []byte {
-	return udf.ReadSectors(sectorNumber, 1)
+	err = udf.init()
+	return
 }
 
 func (udf *Udf) init() (err error) {
@@ -104,10 +79,26 @@ func (udf *Udf) init() (err error) {
 
 	udf.fsd = NewFileSetDescriptor(udf.ReadSector(partitionStart + uint64(udf.lvd.LogicalVolumeContentsUse.Location.LogicalBlockNumber)))
 	rootICB := udf.fsd.RootDirectoryICB
-	udf.root_fe = NewFileEntry(udf.lvd.LogicalVolumeContentsUse.GetPartition(), udf.ReadSector(udf.LogicalPartitionStart(rootICB.GetPartition()) + rootICB.GetLocation()))
+	udf.root_fe = NewFileEntry(udf.lvd.LogicalVolumeContentsUse.GetPartition(), udf.ReadSector(udf.LogicalPartitionStart(rootICB.GetPartition())+rootICB.GetLocation()))
 
 	udf.isInited = true
 	return
+}
+
+func (udf *Udf) ReadSector(sectorNumber uint64) []byte {
+	return udf.ReadSectors(sectorNumber, 1)
+}
+
+func (udf *Udf) ReadSectors(sectorNumber uint64, sectorsCount uint64) []byte {
+	buf := make([]byte, udf.SECTOR_SIZE*sectorsCount)
+	read, err := udf.r.ReadAt(buf[:], int64(udf.SECTOR_SIZE*sectorNumber))
+	if err != nil {
+		panic(err)
+	}
+	/*if readed != int(udf.SECTOR_SIZE*sectorsCount) {
+		panic(readed)
+	}*/
+	return buf[:read]
 }
 
 func (udf *Udf) ReadDir(fe FileEntryInterface) []File {
@@ -119,7 +110,6 @@ func (udf *Udf) ReadDir(fe FileEntryInterface) []File {
 	ps := udf.LogicalPartitionStart(fe.GetPartition())
 	adPos := fe.GetAllocationDescriptors()[0]
 	fdLen := uint64(adPos.GetLength())
-
 
 	fdBuf := udf.ReadSectors(ps+adPos.GetLocation(), (fdLen+udf.SECTOR_SIZE-1)/udf.SECTOR_SIZE)
 	fdOff := uint64(0)
@@ -139,13 +129,22 @@ func (udf *Udf) ReadDir(fe FileEntryInterface) []File {
 	return result
 }
 
-func NewUdfFromReader(r io.ReaderAt) (udf *Udf, err error) {
-	udf = &Udf{
-		r:        r,
-		isInited: false,
-		pd:		  make(map[uint16]*PartitionDescriptor),
+func (udf *Udf) PhysicalPartitionStart(partition uint16) (physical uint64) {
+	if udf.pd == nil {
+		panic(udf)
+	} else {
+		return uint64(udf.pd[partition].PartitionStartingLocation)
 	}
+}
 
-	err = udf.init()
-	return
+func (udf *Udf) LogicalPartitionStart(partition uint16) (logical uint64) {
+	if udf.lvd == nil || len(udf.lvd.PartitionMaps) < 1 {
+		panic(udf)
+	} else {
+		return uint64(udf.lvd.PartitionMaps[partition].PartitionStart)
+	}
+}
+
+func (udf *Udf) GetReader() io.ReaderAt {
+	return udf.r
 }
