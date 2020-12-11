@@ -44,6 +44,7 @@ func (udf *Udf) init() error {
 			break
 		}
 	}
+	//fmt.Printf("udf.SECTOR_SIZE = %d\n", udf.SECTOR_SIZE)
 
 	if anchorDesc.Descriptor.TagIdentifier != DESCRIPTOR_ANCHOR_VOLUME_POINTER ||
 		anchorDesc.Descriptor.TagChecksum != anchorDesc.Descriptor.Checksum() {
@@ -66,6 +67,14 @@ func (udf *Udf) init() error {
 			udf.lvd = desc.LogicalVolumeDescriptor()
 		}
 	}
+
+	// DEBUGGING ONLY
+	// udf.pvd.Show()
+	// for i, pd := range udf.pd {
+	// 	pd.Show(i)
+	// }
+	// udf.lvd.Show()
+	// DEBUGGING ONLY - end
 
 	for i, pMap := range udf.lvd.PartitionMaps {
 		if pMap.PartitionMapType != 2 {
