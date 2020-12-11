@@ -89,7 +89,7 @@ func (f *File) getReaders(descs []ExtentInterface, filePos int64) (readers []*se
 	return
 }
 
-func (f *File) NewReader() *multiSectionReader {
+func (f *File) NewReader() *MultiSectionReader {
 	descs := f.FileEntry().GetAllocationDescriptors()
 	readers, _ := f.getReaders(descs, 0)
 	return newMultiSectionReader(readers)
@@ -109,25 +109,25 @@ func newSectionReader(inFileStart int64, reader io.ReaderAt, start int64, size i
 	}
 }
 
-type multiSectionReader struct {
+type MultiSectionReader struct {
 	readers []*sectionReader
 	pos     int64
 	size    int64
 	index   int
 }
 
-func newMultiSectionReader(readers []*sectionReader) *multiSectionReader {
+func newMultiSectionReader(readers []*sectionReader) *MultiSectionReader {
 	var size int64
 	for _, reader := range readers {
 		size += reader.size
 	}
-	return &multiSectionReader{
+	return &MultiSectionReader{
 		readers: readers,
 		size:    size,
 	}
 }
 
-func (r *multiSectionReader) Read(p []byte) (n int, err error) {
+func (r *MultiSectionReader) Read(p []byte) (n int, err error) {
 	if r.index > len(r.readers)-1 {
 		return 0, io.EOF
 	}
@@ -148,7 +148,7 @@ func (r *multiSectionReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-func (r *multiSectionReader) Seek(offset int64, whence int) (n int64, err error) {
+func (r *MultiSectionReader) Seek(offset int64, whence int) (n int64, err error) {
 	switch whence {
 	case io.SeekStart:
 		n = offset
@@ -171,7 +171,7 @@ func (r *multiSectionReader) Seek(offset int64, whence int) (n int64, err error)
 	return
 }
 
-func (r *multiSectionReader) ReadAt(p []byte, off int64) (n int, err error) {
+func (r *MultiSectionReader) ReadAt(p []byte, off int64) (n int, err error) {
 	var read int
 	err = os.ErrNotExist // No readers
 	for _, reader := range r.readers {
@@ -186,6 +186,6 @@ func (r *multiSectionReader) ReadAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (r *multiSectionReader) Size() int64 {
+func (r *MultiSectionReader) Size() int64 {
 	return r.size
 }
