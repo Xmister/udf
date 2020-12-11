@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// File is a os.FileInfo-compatible wrapper around an ISO-13346 "UDF" directory entry
 type File struct {
 	Udf               *Udf
 	Fid               *FileIdentifierDescriptor
@@ -13,14 +14,17 @@ type File struct {
 	fileEntryPosition uint64
 }
 
+// IsDir returns true if the entry is a directory or false otherwise
 func (f *File) IsDir() bool {
 	return f.FileEntry().GetICBTag().FileType == 4
 }
 
+// ModTime returns the entry's recording time
 func (f *File) ModTime() time.Time {
 	return f.FileEntry().GetModificationTime()
 }
 
+// Mode returns os.FileMode flag set with the os.ModeDir flag enabled in case of directories
 func (f *File) Mode() os.FileMode {
 	var mode os.FileMode
 
@@ -36,10 +40,12 @@ func (f *File) Mode() os.FileMode {
 	return mode
 }
 
+// Name returns the base name of the given entry
 func (f *File) Name() string {
 	return f.Fid.FileIdentifier
 }
 
+// Size returns the size in bytes of the extent occupied by the file or directory
 func (f *File) Size() int64 {
 	return int64(f.FileEntry().GetInformationLength())
 }
@@ -48,6 +54,7 @@ func (f *File) Sys() interface{} {
 	return f.Fid
 }
 
+// ReadDir returns the children entries in case of a directory
 func (f *File) ReadDir() []File {
 	return f.Udf.ReadDir(f.FileEntry())
 }

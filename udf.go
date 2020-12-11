@@ -5,6 +5,7 @@ import (
 	"io"
 )
 
+// Udf is a wrapper around an .iso file that allows reading its ISO-13346 "UDF" data
 type Udf struct {
 	r           io.ReaderAt
 	isInited    bool
@@ -16,20 +17,22 @@ type Udf struct {
 	SECTOR_SIZE uint64
 }
 
-func NewUdfFromReader(r io.ReaderAt) (udf *Udf, err error) {
-	udf = &Udf{
+// NewUdfFromReader returns an Udf reader reading from a given file
+func NewUdfFromReader(r io.ReaderAt) (*Udf, error) {
+	udf := &Udf{
 		r:        r,
 		isInited: false,
 		pd:       make(map[uint16]*PartitionDescriptor),
 	}
 
-	err = udf.init()
-	return
+	err := udf.init()
+	return udf, err
 }
 
-func (udf *Udf) init() (err error) {
+func (udf *Udf) init() error {
+	var err error
 	if udf.isInited {
-		return
+		return nil
 	}
 
 	var anchorDesc *AnchorVolumeDescriptorPointer
@@ -45,7 +48,7 @@ func (udf *Udf) init() (err error) {
 	if anchorDesc.Descriptor.TagIdentifier != DESCRIPTOR_ANCHOR_VOLUME_POINTER ||
 		anchorDesc.Descriptor.TagChecksum != anchorDesc.Descriptor.Checksum() {
 		err = errors.New("couldn't find sector size")
-		return
+		return err
 	}
 
 	for sector := uint64(anchorDesc.MainVolumeDescriptorSeq.Location); ; sector++ {
@@ -82,7 +85,7 @@ func (udf *Udf) init() (err error) {
 	udf.root_fe = NewFileEntry(udf.lvd.LogicalVolumeContentsUse.GetPartition(), udf.ReadSector(udf.LogicalPartitionStart(rootICB.GetPartition())+rootICB.GetLocation()))
 
 	udf.isInited = true
-	return
+	return nil
 }
 
 func (udf *Udf) ReadSector(sectorNumber uint64) []byte {
@@ -129,6 +132,7 @@ func (udf *Udf) ReadDir(fe FileEntryInterface) []File {
 	return result
 }
 
+// XXX - unused
 func (udf *Udf) PhysicalPartitionStart(partition uint16) (physical uint64) {
 	if udf.pd == nil {
 		panic(udf)
