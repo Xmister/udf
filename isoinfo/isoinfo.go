@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mogaika/udf"
+	"github.com/saidelike/udf"
 )
 
 func printDir(spaces string, files []udf.File) {
@@ -24,7 +24,10 @@ func main() {
 		panic(err)
 	}
 
-	u := udf.NewUdfFromReader(rdr)
+	u, err := udf.NewUdfFromReader(rdr)
+	if err != nil {
+		panic(err)
+	}
 
 	printDir("", u.ReadDir(nil))
 }

@@ -1,28 +1,31 @@
 ## Udf filesystem golang library
-- Non-optimized
-- Some functioal is broken
-- `recovery()` style error handling interface
-- Work only with certain iso's
 
-It's all because I has reached requried functional for me.
+- Non-optimized
+- Some features may be broken
+- `recovery()` style error handling interface
+- Tested only with certain ISOs (e.g. Windows ISOs)
+
+It's all because I has reached required functionality for me.
 
 ## Example
+
 ```go
 package main
 
 import (
 	"fmt"
 	"os"
-	"github.com/mogaika/udf"
+	"github.com/saidelike/udf"
 )
 
 func main() {
-	r, _ := os.Open("example.iso")
-	u := udf.NewUdfFromReader(r)
+	rdr, _ := os.Open("example.iso")
+	u, _ := udf.NewUdfFromReader(r)
 	for _, f := range u.ReadDir(nil) {
 		fmt.Printf("%s %-10d %-20s %v\n", f.Mode().String(), f.Size(), f.Name(), f.ModTime())
 	}
 }
+
 ```
 Output:
 ```
@@ -33,5 +36,8 @@ Output:
 -r-xr-xr-x 15653      dbcman.irx           2005-10-18 00:00:00 +0000 UTC
 ```
 
+See [isoinfo.go](isoinfo/isoinfo.go) for complete example.
 
+## Specification
 
+* http://www.osta.org/specs/pdf/udf260.pdf
