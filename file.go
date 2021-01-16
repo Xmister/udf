@@ -127,10 +127,7 @@ func newMultiSectionReader(readers []*sectionReader) *MultiSectionReader {
 	}
 }
 
-func (r *MultiSectionReader) Read(p []byte) (n int, err error) {
-	if r.index > len(r.readers)-1 {
-		return 0, io.EOF
-	}
+func (r *MultiSectionReader) actualRead(p []byte) (n int, err error) {
 	n, err = r.readers[r.index].Read(p)
 	r.pos += int64(n)
 	if err != nil {
@@ -138,7 +135,7 @@ func (r *MultiSectionReader) Read(p []byte) (n int, err error) {
 			r.index++
 			r.readers[r.index].Seek(0, 0)
 			if n == 0 {
-				n, err = r.Read(p)
+				n, err = r.actualRead(p)
 			}
 		}
 	}
@@ -146,6 +143,13 @@ func (r *MultiSectionReader) Read(p []byte) (n int, err error) {
 		err = nil
 	}
 	return
+}
+
+func (r *MultiSectionReader) Read(p []byte) (n int, err error) {
+	if r.index > len(r.readers)-1 {
+		return 0, io.EOF
+	}
+	return r.actualRead(p)
 }
 
 func (r *MultiSectionReader) Seek(offset int64, whence int) (n int64, err error) {
