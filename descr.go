@@ -41,13 +41,13 @@ func (d *Descriptor) Data() []byte {
 	return buf
 }
 
-func (d* Descriptor) Checksum() (checksum uint8) {
-		for i:=0; i<16; i++ {
-			if (i != 4) {
-				checksum += d.data[i]
-			}
+func (d *Descriptor) Checksum() (checksum uint8) {
+	for i := 0; i < 16; i++ {
+		if i != 4 {
+			checksum += d.data[i]
 		}
-		return
+	}
+	return
 }
 
 func (d *Descriptor) FromBytes(b []byte) *Descriptor {
@@ -188,7 +188,7 @@ type PartitionMap struct {
 func (pm *PartitionMap) FromBytes(b []byte) *PartitionMap {
 	pm.PartitionMapType = rb_u8(b[0:])
 	pm.PartitionMapLength = rb_u8(b[1:])
-	offset:=0
+	offset := 0
 	switch pm.PartitionMapType {
 	case 1:
 		offset = 2
@@ -196,7 +196,9 @@ func (pm *PartitionMap) FromBytes(b []byte) *PartitionMap {
 		offset = 36
 	}
 	pm.VolumeSequenceNumber = rb_u16(b[offset:])
-	pm.PartitionNumber = rb_u16(b[offset+2:])
+	// XXX - For whatever reason, the Microsoft ISOs have a little endian partition
+	// number here???
+	pm.PartitionNumber = rl_u16(b[offset+2:])
 	pm.PartitionStart = uint32(pm.VolumeSequenceNumber)
 	return pm
 }
@@ -358,14 +360,14 @@ type FileEntry struct {
 	ExtendedAttributes            []byte
 	AllocationDescriptors         []byte
 	// Manual field
-	Partition                     uint16
+	Partition uint16
 }
 
 type ExtendedFileEntry struct {
 	FileEntry
-	CreationTime              time.Time
-	ObjectSize                uint64
-	StreamDirectoryIcb        ExtentLong
+	CreationTime       time.Time
+	ObjectSize         uint64
+	StreamDirectoryIcb ExtentLong
 }
 
 func (fe *FileEntry) FromBytes(b []byte) *FileEntry {
@@ -394,7 +396,7 @@ func (fe *FileEntry) FromBytes(b []byte) *FileEntry {
 		return nil
 	}
 	fe.ExtendedAttributes = b[176:allocDescStart]
-	fe.AllocationDescriptors = b[allocDescStart:allocDescStart+fe.LengthOfAllocationDescriptors]
+	fe.AllocationDescriptors = b[allocDescStart : allocDescStart+fe.LengthOfAllocationDescriptors]
 	return fe
 }
 
@@ -498,7 +500,7 @@ func (fe *ExtendedFileEntry) FromBytes(b []byte) *ExtendedFileEntry {
 		return nil
 	}
 	fe.ExtendedAttributes = b[216:allocDescStart]
-	fe.AllocationDescriptors = b[allocDescStart:allocDescStart+fe.LengthOfAllocationDescriptors]
+	fe.AllocationDescriptors = b[allocDescStart : allocDescStart+fe.LengthOfAllocationDescriptors]
 	return fe
 }
 

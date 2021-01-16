@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// File is a os.FileInfo-compatible wrapper around an ISO-13346 "UDF" directory entry
 type File struct {
 	Udf               *Udf
 	Fid               *FileIdentifierDescriptor
@@ -13,10 +14,91 @@ type File struct {
 	fileEntryPosition uint64
 }
 
+// IsDir returns true if the entry is a directory or false otherwise
+func (f *File) IsDir() bool {
+	return f.FileEntry().GetICBTag().FileType == 4
+}
+
+// ModTime returns the entry's recording time
+func (f *File) ModTime() time.Time {
+	return f.FileEntry().GetModificationTime()
+}
+
+// Mode returns os.FileMode flag set with the os.ModeDir flag enabled in case of directories
+func (f *File) Mode() os.FileMode {
+	var mode os.FileMode
+
+	perms := os.FileMode(f.FileEntry().GetPermissions())
+	mode |= ((perms >> 0) & 7) << 0
+	mode |= ((perms >> 5) & 7) << 3
+	mode |= ((perms >> 10) & 7) << 6
+
+	if f.IsDir() {
+		mode |= os.ModeDir
+	}
+
+	return mode
+}
+
+// Name returns the base name of the given entry
+func (f *File) Name() string {
+	return f.Fid.FileIdentifier
+}
+
+// Size returns the size in bytes of the extent occupied by the file or directory
+func (f *File) Size() int64 {
+	return int64(f.FileEntry().GetInformationLength())
+}
+
+func (f *File) Sys() interface{} {
+	return f.Fid
+}
+
+// ReadDir returns the children entries in case of a directory
+func (f *File) ReadDir() []File {
+	return f.Udf.ReadDir(f.FileEntry())
+}
+
+func (f *File) GetFileEntryPosition() int64 {
+	return int64(f.fileEntryPosition)
+}
+
+func (f *File) FileEntry() FileEntryInterface {
+	if f.fe == nil {
+		f.fileEntryPosition = uint64(f.Fid.ICB.GetLocation())
+		meta := f.Udf.LogicalPartitionStart(f.Fid.ICB.GetPartition())
+		f.fe = NewFileEntry(f.Fid.ICB.GetPartition(), f.Udf.ReadSector(meta+f.fileEntryPosition))
+	}
+	return f.fe
+}
+
+func (f *File) getReaders(descs []ExtentInterface, filePos int64) (readers []*sectionReader, finalFilePos int64) {
+	finalFilePos = filePos
+	for i := 0; i < len(descs); i++ {
+		if descs[i].HasExtended() {
+			extendData := f.Udf.ReadSector(f.Udf.LogicalPartitionStart(descs[i].GetPartition()) + descs[i].GetLocation())
+			aed := new(AED).FromBytes(extendData)
+			var subReaders []*sectionReader
+			subReaders, finalFilePos = f.getReaders(GetAllocationDescriptors(f.FileEntry().GetICBTag().AllocationType, extendData[24:], aed.LengthOfAllocationDescriptors), finalFilePos)
+			readers = append(readers, subReaders...)
+		} else if !descs[i].IsNotRecorded() {
+			readers = append(readers, newSectionReader(finalFilePos, f.Udf.r, int64(f.Udf.SECTOR_SIZE)*int64(f.Udf.LogicalPartitionStart(descs[i].GetPartition())+descs[i].GetLocation()), int64(descs[i].GetLength())))
+		}
+		finalFilePos += int64(descs[i].GetLength())
+	}
+	return
+}
+
+func (f *File) NewReader() *MultiSectionReader {
+	descs := f.FileEntry().GetAllocationDescriptors()
+	readers, _ := f.getReaders(descs, 0)
+	return newMultiSectionReader(readers)
+}
+
 type sectionReader struct {
 	*io.SectionReader
 	start int64
-	size int64
+	size  int64
 }
 
 func newSectionReader(inFileStart int64, reader io.ReaderAt, start int64, size int64) *sectionReader {
@@ -27,25 +109,25 @@ func newSectionReader(inFileStart int64, reader io.ReaderAt, start int64, size i
 	}
 }
 
-type multiSectionReader struct {
+type MultiSectionReader struct {
 	readers []*sectionReader
-	pos int64
-	size int64
-	index int
+	pos     int64
+	size    int64
+	index   int
 }
 
-func newMultiSectionReader(readers []*sectionReader) *multiSectionReader {
+func newMultiSectionReader(readers []*sectionReader) *MultiSectionReader {
 	var size int64
 	for _, reader := range readers {
 		size += reader.size
 	}
-	return &multiSectionReader{
+	return &MultiSectionReader{
 		readers: readers,
-		size: size,
+		size:    size,
 	}
 }
 
-func (r *multiSectionReader) Read(p []byte) (n int, err error) {
+func (r *MultiSectionReader) Read(p []byte) (n int, err error) {
 	if r.index > len(r.readers)-1 {
 		return 0, io.EOF
 	}
@@ -66,7 +148,7 @@ func (r *multiSectionReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-func (r *multiSectionReader) Seek(offset int64, whence int) (n int64, err error) {
+func (r *MultiSectionReader) Seek(offset int64, whence int) (n int64, err error) {
 	switch whence {
 	case io.SeekStart:
 		n = offset
@@ -89,7 +171,7 @@ func (r *multiSectionReader) Seek(offset int64, whence int) (n int64, err error)
 	return
 }
 
-func (r *multiSectionReader) ReadAt(p []byte, off int64) (n int, err error) {
+func (r *MultiSectionReader) ReadAt(p []byte, off int64) (n int, err error) {
 	var read int
 	err = os.ErrNotExist // No readers
 	for _, reader := range r.readers {
@@ -104,81 +186,6 @@ func (r *multiSectionReader) ReadAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-func (r *multiSectionReader) Size() int64 {
+func (r *MultiSectionReader) Size() int64 {
 	return r.size
-}
-
-func (f *File) GetFileEntryPosition() int64 {
-	return int64(f.fileEntryPosition)
-}
-
-func (f *File) FileEntry() FileEntryInterface {
-	if f.fe == nil {
-		f.fileEntryPosition = uint64(f.Fid.ICB.GetLocation())
-		meta := f.Udf.LogicalPartitionStart(f.Fid.ICB.GetPartition())
-		f.fe = NewFileEntry(f.Fid.ICB.GetPartition(), f.Udf.ReadSector(meta + f.fileEntryPosition))
-	}
-	return f.fe
-}
-
-func (f *File) getReaders(descs []ExtentInterface, filePos int64) (readers []*sectionReader, finalFilePos int64) {
-	finalFilePos = filePos
-	for i:=0; i<len(descs); i++ {
-		if descs[i].HasExtended() {
-			extendData := f.Udf.ReadSector(f.Udf.LogicalPartitionStart(descs[i].GetPartition()) + descs[i].GetLocation())
-			aed := new(AED).FromBytes(extendData)
-			var subReaders []*sectionReader
-			subReaders, finalFilePos = f.getReaders(GetAllocationDescriptors(f.FileEntry().GetICBTag().AllocationType, extendData[24:], aed.LengthOfAllocationDescriptors), finalFilePos)
-			readers = append(readers, subReaders...)
-		} else if !descs[i].IsNotRecorded() {
-			readers = append(readers, newSectionReader(finalFilePos, f.Udf.r, int64(f.Udf.SECTOR_SIZE)*int64(f.Udf.LogicalPartitionStart(descs[i].GetPartition()) + descs[i].GetLocation()), int64(descs[i].GetLength())))
-		}
-		finalFilePos += int64(descs[i].GetLength())
-	}
-	return
-}
-
-func (f *File) NewReader() *multiSectionReader {
-	descs := f.FileEntry().GetAllocationDescriptors()
-	readers, _ := f.getReaders(descs, 0)
-	return newMultiSectionReader(readers)
-}
-
-func (f *File) Name() string {
-	return f.Fid.FileIdentifier
-}
-
-func (f *File) Mode() os.FileMode {
-	var mode os.FileMode
-
-	perms := os.FileMode(f.FileEntry().GetPermissions())
-	mode |= ((perms >> 0) & 7) << 0
-	mode |= ((perms >> 5) & 7) << 3
-	mode |= ((perms >> 10) & 7) << 6
-
-	if f.IsDir() {
-		mode |= os.ModeDir
-	}
-
-	return mode
-}
-
-func (f *File) Size() int64 {
-	return int64(f.FileEntry().GetInformationLength())
-}
-
-func (f *File) ModTime() time.Time {
-	return f.FileEntry().GetModificationTime()
-}
-
-func (f *File) IsDir() bool {
-	return f.FileEntry().GetICBTag().FileType == 4
-}
-
-func (f *File) Sys() interface{} {
-	return f.Fid
-}
-
-func (f *File) ReadDir() []File {
-	return f.Udf.ReadDir(f.FileEntry())
 }
