@@ -2,7 +2,6 @@ package udf
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"unsafe"
 )
@@ -31,10 +30,9 @@ func NewUdfFromReader(r io.ReaderAt) (*Udf, error) {
 	return udf, err
 }
 
-func (udf *Udf) init() error {
-	var err error
+func (udf *Udf) init() (err error) {
 	if udf.isInited {
-		return nil
+		return
 	}
 
 	var anchorDesc *AnchorVolumeDescriptorPointer
@@ -51,7 +49,7 @@ func (udf *Udf) init() error {
 	if anchorDesc.Descriptor.TagIdentifier != DESCRIPTOR_ANCHOR_VOLUME_POINTER ||
 		anchorDesc.Descriptor.TagChecksum != anchorDesc.Descriptor.Checksum() {
 		err = errors.New("couldn't find sector size")
-		return err
+		return
 	}
 
 	for sector := uint64(anchorDesc.MainVolumeDescriptorSeq.Location); ; sector++ {
@@ -82,9 +80,7 @@ func (udf *Udf) init() error {
 		if pMap.PartitionMapType != 2 {
 			// Check to error early if there is no match with a partition number
 			if _, ok := udf.pd[pMap.PartitionNumber]; !ok {
-				msg := fmt.Sprintf("could not find partition number: %d\n", pMap.PartitionNumber)
-				err = errors.New(msg)
-				return err
+				return errors.New("could not find partition number")
 			}
 			udf.lvd.PartitionMaps[i].PartitionStart = udf.pd[pMap.PartitionNumber].PartitionStartingLocation
 			continue
@@ -102,7 +98,7 @@ func (udf *Udf) init() error {
 	udf.root_fe = NewFileEntry(udf.lvd.LogicalVolumeContentsUse.GetPartition(), udf.ReadSector(udf.LogicalPartitionStart(rootICB.GetPartition())+rootICB.GetLocation()))
 
 	udf.isInited = true
-	return nil
+	return
 }
 
 func (udf *Udf) ReadSector(sectorNumber uint64) []byte {

@@ -1,7 +1,6 @@
 package udf
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -133,29 +132,6 @@ func (pvd *PrimaryVolumeDescriptor) FromBytes(b []byte) *PrimaryVolumeDescriptor
 	return pvd
 }
 
-func (pvd *PrimaryVolumeDescriptor) Show() {
-	fmt.Printf("----- PrimaryVolumeDescriptor ----\n")
-	fmt.Printf("VolumeDescriptorSequenceNumber: %d\n", pvd.VolumeDescriptorSequenceNumber)
-	fmt.Printf("PrimaryVolumeDescriptorNumber: %d\n", pvd.PrimaryVolumeDescriptorNumber)
-	fmt.Printf("VolumeIdentifier: %s\n", pvd.VolumeIdentifier)
-	fmt.Printf("VolumeSequenceNumber: %d\n", pvd.VolumeSequenceNumber)
-	fmt.Printf("MaximumVolumeSequenceNumber: %d\n", pvd.MaximumVolumeSequenceNumber)
-	fmt.Printf("InterchangeLevel: %d\n", pvd.InterchangeLevel)
-	fmt.Printf("MaximumInterchangeLevel: %d\n", pvd.MaximumInterchangeLevel)
-	fmt.Printf("CharacterSetList: %d\n", pvd.CharacterSetList)
-	fmt.Printf("MaximumCharacterSetList: %d\n", pvd.MaximumCharacterSetList)
-	fmt.Printf("VolumeSetIdentifier: %s\n", pvd.VolumeSetIdentifier)
-	fmt.Printf("VolumeAbstract: %v\n", pvd.VolumeAbstract)
-	fmt.Printf("VolumeCopyrightNoticeExtent: %v\n", pvd.VolumeCopyrightNoticeExtent)
-	pvd.ApplicationIdentifier.Show("ApplicationIdentifier")
-	fmt.Printf("RecordingDateTime: %v\n", pvd.RecordingDateTime)
-	pvd.ImplementationIdentifier.Show("ImplementationIdentifier")
-	fmt.Printf("ImplementationUse: %v\n", pvd.ImplementationUse)
-	fmt.Printf("PredecessorVolumeDescriptorSequenceLocation: %v\n", pvd.PredecessorVolumeDescriptorSequenceLocation)
-	fmt.Printf("Flags: %d\n", pvd.Flags)
-	fmt.Printf("----- PrimaryVolumeDescriptor (end) ----\n")
-}
-
 func NewPrimaryVolumeDescriptor(b []byte) *PrimaryVolumeDescriptor {
 	return new(PrimaryVolumeDescriptor).FromBytes(b)
 }
@@ -193,21 +169,6 @@ func (pd *PartitionDescriptor) FromBytes(b []byte) *PartitionDescriptor {
 	return pd
 }
 
-func (pd *PartitionDescriptor) Show(i uint16) {
-	fmt.Printf("----- PartitionDescriptor %d ----\n", i)
-	fmt.Printf("VolumeDescriptorSequenceNumber: %d\n", pd.VolumeDescriptorSequenceNumber)
-	fmt.Printf("PartitionFlags: %d\n", pd.PartitionFlags)
-	fmt.Printf("PartitionNumber: %d\n", pd.PartitionNumber)
-	pd.ImplementationIdentifier.Show("PartitionContents")
-	fmt.Printf("PartitionContentsUse: %v\n", pd.PartitionContentsUse)
-	fmt.Printf("AccessType: %d\n", pd.AccessType)
-	fmt.Printf("PartitionStartingLocation: %d\n", pd.PartitionStartingLocation)
-	fmt.Printf("PartitionLength: %d\n", pd.PartitionLength)
-	pd.ImplementationIdentifier.Show("ImplementationIdentifier")
-	fmt.Printf("ImplementationUse: %v\n", pd.ImplementationUse)
-	fmt.Printf("----- PartitionDescriptor %d (end) ----\n", i)
-}
-
 func NewPartitionDescriptor(b []byte) *PartitionDescriptor {
 	return new(PartitionDescriptor).FromBytes(b)
 }
@@ -242,16 +203,6 @@ func (pm *PartitionMap) FromBytes(b []byte) *PartitionMap {
 	return pm
 }
 
-func (pm *PartitionMap) Show(i uint32) {
-	fmt.Printf("----- PartitionMap %d ----\n", i)
-	fmt.Printf("PartitionMapType: %d\n", pm.PartitionMapType)
-	fmt.Printf("PartitionMapLength: %d\n", pm.PartitionMapLength)
-	fmt.Printf("VolumeSequenceNumber: %d\n", pm.VolumeSequenceNumber)
-	fmt.Printf("PartitionNumber: %d\n", pm.PartitionNumber)
-	fmt.Printf("PartitionStart: %d\n", pm.PartitionStart)
-	fmt.Printf("----- PartitionMap %d (end) ----\n", i)
-}
-
 type LogicalVolumeDescriptor struct {
 	Descriptor                     Descriptor
 	VolumeDescriptorSequenceNumber uint32
@@ -284,25 +235,6 @@ func (lvd *LogicalVolumeDescriptor) FromBytes(b []byte) *LogicalVolumeDescriptor
 		lvd.PartitionMaps[i].FromBytes(b[440+i*6:])
 	}
 	return lvd
-}
-
-func (lvd *LogicalVolumeDescriptor) Show() {
-	fmt.Printf("----- LogicalVolumeDescriptor ----\n")
-	fmt.Printf("VolumeDescriptorSequenceNumber: %v\n", lvd.VolumeDescriptorSequenceNumber)
-	fmt.Printf("LogicalVolumeIdentifier: %v\n", lvd.LogicalVolumeIdentifier)
-	fmt.Printf("LogicalBlockSize: %v\n", lvd.LogicalBlockSize)
-	lvd.DomainIdentifier.Show("DomainIdentifier")
-	fmt.Printf("LogicalVolumeContentsUse: %v\n", lvd.LogicalVolumeContentsUse)
-	fmt.Printf("MapTableLength: %v\n", lvd.MapTableLength)
-	fmt.Printf("NumberOfPartitionMaps: %v\n", lvd.NumberOfPartitionMaps)
-	lvd.ImplementationIdentifier.Show("ImplementationIdentifier")
-	fmt.Printf("ImplementationUse: %v\n", lvd.ImplementationUse)
-	fmt.Printf("IntegritySequenceExtent: %v\n", lvd.IntegritySequenceExtent)
-	fmt.Printf("PartitionMaps: %v\n", lvd.PartitionMaps)
-	for i := uint32(0); i < lvd.NumberOfPartitionMaps; i++ {
-		lvd.PartitionMaps[i].Show(i)
-	}
-	fmt.Printf("----- LogicalVolumeDescriptor (end) ----\n")
 }
 
 func NewLogicalVolumeDescriptor(b []byte) *LogicalVolumeDescriptor {
